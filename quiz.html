@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>문제 — 마킹 내용 점검</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="topbar">
+    <a class="home-link" href="index.html">⟵ 홈</a>
+    <span class="crumb">문제 · 마킹 내용 점검 (통합)</span>
+  </nav>
+
+  <header class="hero">
+    <span class="eyebrow">기초 + 환경 + SQL 통합 · 빈칸 / O·X / 객관식</span>
+    <h1>마킹 내용 문제</h1>
+    <p>세 과목을 한 세트로 모았습니다. 문제마다 <b>채점</b> 버튼으로 하나씩 확인하세요.</p>
+  </header>
+
+  <div class="quiz-guide">빈칸은 입력, O·X와 객관식은 보기를 선택한 뒤 각 문제의 <b>채점</b> 버튼을 누르면 그 문제만 채점됩니다. (한 문제당 1회)</div>
+
+  <main id="root"></main>
+
+  <div class="scorebar">
+    <div class="score" id="score">0 <small>/ 0 정답</small></div>
+    <div class="prog-wrap">
+      <div class="prog-track"><div class="prog-bar" id="prog"></div></div>
+      <div class="prog-label" id="progLabel">0 / 0 채점</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="msg" id="msg">문제를 풀어 보세요!</div>
+    <button class="btn btn-ghost" id="reset">전체 다시 풀기</button>
+  </div>
+
+  <div class="foot">출처 : 시스템 프로그래밍 지필평가 출제 버전 PDF (기초·환경·SQL) · 형광펜 마킹 기반 문항</div>
+</div>
+
+<script src="data.js"></script>
+<script>
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function norm(s){return (s||"").toString().trim().toLowerCase().replace(/\s+/g,"").replace(/[.,'’`·]/g,"");}
+
+const SUBMETA = {gicho:{label:"기초",cls:"sb-gicho"}, hwan:{label:"환경",cls:"sb-hwan"}, sql:{label:"SQL",cls:"sb-sql"}};
+const ORDER = [
+  {type:"blank",  title:"Ⅰ. 빈칸 채우기"},
+  {type:"ox",     title:"Ⅱ. O / X"},
+  {type:"choice", title:"Ⅲ. 객관식"}
+];
+
+let QLIST = [];   // 통합 문제 목록 (flat)
+let graded = 0, correct = 0;
+
+function buildList(){
+  QLIST = [];
+  for(const grp of ORDER){
+    for(const subId of ["gicho","hwan","sql"]){
+      (QUIZ[subId][grp.type]||[]).forEach(q=>{
+        QLIST.push({type:grp.type, sub:subId, q, done:false});
+      });
+    }
+  }
+}
+
+function render(){
+  buildList();
+  graded = 0; correct = 0;
+  const root = document.getElementById('root');
+  let html = "";
+  let gi = 0;
+
+  for(const grp of ORDER){
+    const items = QLIST.map((e,idx)=>({e,idx})).filter(x=>x.e.type===grp.type);
+    html += `<div class="q-section"><div class="q-sec-title">${grp.title} <span class="q-sec-count">${items.length}문항</span></div></div>`;
+    for(const {e,idx} of items){
+      gi++;
+      const meta = SUBMETA[e.sub];
+      const badge = `<span class="sub-badge ${meta.cls}">${meta.label}</span>`;
+      let bodyHtml = "";
+      if(e.type==="blank"){
+        const parts = e.q.q.split("___");
+        bodyHtml = `<div class="qtext">${badge}<span class="qnum">Q${gi}.</span>${esc(parts[0])}<input class="blank-input" data-gi="${idx}">${esc(parts[1]||"")}</div>`;
+      }else if(e.type==="ox"){
+        bodyHtml = `<div class="qtext">${badge}<span class="qnum">Q${gi}.</span>${esc(e.q.q)}</div>
+          <div class="ox-row" data-gi="${idx}">
+            <button class="ox-btn" data-v="O">O</button>
+            <button class="ox-btn" data-v="X">X</button>
+          </div>`;
+      }else{
+        const opts = e.q.options.map((o,i)=>`<div class="opt" data-idx="${i}"><span class="mark">${i+1}</span><span>${esc(o)}</span></div>`).join("");
+        bodyHtml = `<div class="qtext">${badge}<span class="qnum">Q${gi}.</span>${esc(e.q.q)}</div>
+          <div class="opts" data-gi="${idx}">${opts}</div>`;
+      }
+      html += `<div class="q" data-gi="${idx}">${bodyHtml}
+        <div class="q-foot"><button class="btn btn-primary btn-sm q-grade" data-gi="${idx}">채점</button></div>
+        <div class="answer-tip" data-gi="${idx}"></div></div>`;
+    }
+  }
+  root.innerHTML = html;
+  bindInteractions();
+  updateScore();
+}
+
+function bindInteractions(){
+  document.querySelectorAll('.ox-row').forEach(row=>{
+    row.querySelectorAll('.ox-btn').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        if(row.dataset.locked) return;
+        row.querySelectorAll('.ox-btn').forEach(b=>b.classList.remove('sel'));
+        btn.classList.add('sel');
+      });
+    });
+  });
+  document.querySelectorAll('.opts').forEach(box=>{
+    box.querySelectorAll('.opt').forEach(opt=>{
+      opt.addEventListener('click',()=>{
+        if(box.dataset.locked) return;
+        box.querySelectorAll('.opt').forEach(o=>o.classList.remove('sel'));
+        opt.classList.add('sel');
+      });
+    });
+  });
+  document.querySelectorAll('.q-grade').forEach(btn=>{
+    btn.addEventListener('click',()=>gradeOne(+btn.dataset.gi));
+  });
+}
+
+function gradeOne(idx){
+  const e = QLIST[idx];
+  if(e.done) return;
+  const tip = document.querySelector(`.answer-tip[data-gi="${idx}"]`);
+  const btn = document.querySelector(`.q-grade[data-gi="${idx}"]`);
+  let ok=false, ansLabel="";
+
+  if(e.type==="blank"){
+    const inp = document.querySelector(`.blank-input[data-gi="${idx}"]`);
+    const accept = (e.q.accept||[e.q.answer]).map(norm);
+    ok = accept.includes(norm(inp.value));
+    inp.classList.add(ok?'correct':'wrong');
+    inp.readOnly = true;
+    ansLabel = e.q.answer;
+  }else if(e.type==="ox"){
+    const row = document.querySelector(`.ox-row[data-gi="${idx}"]`);
+    row.dataset.locked="1";
+    const sel = row.querySelector('.ox-btn.sel');
+    const ansV = e.q.answer ? "O" : "X";
+    row.querySelectorAll('.ox-btn').forEach(b=>{ if(b.dataset.v===ansV) b.classList.add('correct'); });
+    ok = sel && sel.dataset.v===ansV;
+    if(sel && !ok) sel.classList.add('wrong');
+    ansLabel = ansV;
+  }else{
+    const box = document.querySelector(`.opts[data-gi="${idx}"]`);
+    box.dataset.locked="1";
+    const sel = box.querySelector('.opt.sel');
+    box.querySelectorAll('.opt').forEach(o=>{ if(+o.dataset.idx===e.q.answer) o.classList.add('correct'); });
+    ok = sel && +sel.dataset.idx===e.q.answer;
+    if(sel && !ok) sel.classList.add('wrong');
+    ansLabel = (e.q.answer+1)+"번";
+  }
+
+  e.done = true; graded++; if(ok) correct++;
+  tip.className = "answer-tip show" + (ok?"":" miss");
+  tip.textContent = (ok ? "정답! " : `오답 — 정답: ${ansLabel} · `) + (e.q.explain||"");
+  btn.disabled = true; btn.textContent = ok ? "✓ 정답" : "✗ 오답";
+  btn.classList.remove('btn-primary'); btn.classList.add(ok?'btn-good':'btn-bad');
+  updateScore();
+}
+
+function updateScore(){
+  const total = QLIST.length;
+  const pct = total ? Math.round(graded/total*100) : 0;
+  document.getElementById('score').innerHTML = `${correct} <small>/ ${graded||0} 정답</small>`;
+  document.getElementById('prog').style.width = pct+"%";
+  document.getElementById('progLabel').textContent = `${graded} / ${total} 채점`;
+  const msg = document.getElementById('msg');
+  if(graded===0){ msg.textContent="문제를 풀어 보세요!"; return; }
+  if(graded<total){ msg.textContent=`진행 중… (${correct}/${graded} 정답)`; return; }
+  const r = Math.round(correct/total*100);
+  msg.textContent = r===100?"완벽해요! 🎉" : r>=70?"잘했어요! 👍" : r>=40?"조금만 더! 💪":"정리부터 다시 볼까요? 📖";
+}
+
+document.getElementById('reset').addEventListener('click',render);
+render();
+</script>
+</body>
+</html>

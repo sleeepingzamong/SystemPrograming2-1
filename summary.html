@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>정리 — 마킹 원문 그대로</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <nav class="topbar">
+    <a class="home-link" href="index.html">⟵ 홈</a>
+    <span class="crumb">정리 · 형광펜 마킹 원문 + 상하관계</span>
+  </nav>
+
+  <header class="hero">
+    <span class="eyebrow">요약 없이 원문 그대로</span>
+    <h1>형광펜 마킹 정리</h1>
+    <p>세 PDF에서 형광펜이 칠해진 부분을 대단원→절 상하관계와 함께 모았습니다.</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-sub="gicho">응용SW 기초 기술 활용</button>
+    <button class="tab-btn" data-sub="hwan">개발자 환경 구축</button>
+    <button class="tab-btn" data-sub="sql">SQL활용</button>
+  </div>
+
+  <div class="toolbar">
+    <button class="mini-btn" id="openAll">모두 펼치기</button>
+    <button class="mini-btn" id="closeAll">모두 접기</button>
+    <span class="spacer"></span>
+    <span class="crumb" id="cnt"></span>
+  </div>
+
+  <main id="root"></main>
+
+  <p class="note-quote">＊ <span style="background:linear-gradient(transparent 58%,#fff27a 58%)">노란 형광</span> = PDF의 노란 형광펜, <span style="text-decoration:underline;text-decoration-color:#1f9d57;text-decoration-thickness:2.5px;color:#147a45;font-weight:700">초록 밑줄</span> = PDF의 초록 형광펜. 줄바꿈으로 잘린 끝부분은 (괄호)로 보충했습니다.</p>
+  <div class="foot">출처 : 시스템 프로그래밍 지필평가 출제 버전 PDF (기초·환경·SQL) · 형광펜 마킹 페이지 추출</div>
+</div>
+
+<script src="data.js"></script>
+<script>
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+/* 노란 형광 + [[초록 밑줄]] 구간 렌더링 */
+function marked(t){
+  return esc(t).split(/\[\[|\]\]/).map((seg,i)=>{
+    if(!seg) return "";
+    return i%2 ? `<span class="gu">${seg}</span>` : `<span class="hl">${seg}</span>`;
+  }).join("");
+}
+/* 항목 전체가 초록이면 초록 밑줄, 아니면 marked() */
+function markedItem(t,c){
+  if(c==="g") return `<span class="gu">${esc(t)}</span>`;
+  return marked(t);
+}
+
+function render(subId){
+  const sub = SUBJECTS.find(s=>s.id===subId);
+  const root = document.getElementById('root');
+  document.getElementById('cnt').textContent = `마킹 페이지 ${sub.pages.length}개`;
+  let html = `<div class="unit-title unit-${sub.id}"><span class="badge">${sub.badge}</span>${esc(sub.title)}</div>`;
+  for(const pg of sub.pages){
+    html += `<details class="topic" open><summary><span class="pg">p.${pg.page}</span>${esc(pg.title)}<span class="chev">▶</span></summary><div class="body">`;
+    if(pg.path && pg.path.length){
+      html += `<div class="crumbpath">`+pg.path.map(p=>`<span class="cp">${esc(p)}</span>`).join(`<span class="cp-sep">›</span>`)+`</div>`;
+    }
+    html += `<div class="tree">`;
+    for(const it of pg.items){
+      const lv = it.lvl||0;
+      if(it.k==="ctx"){
+        html += `<div class="tn ctx lv${lv}">${esc(it.text)}</div>`;
+      }else if(it.k==="head"){
+        const cls = it.c==="g" ? "tn lv"+lv : "tn mk-head lv"+lv;
+        html += (it.c==="g")
+          ? `<div class="tn lv${lv}"><div class="mk-head" style="color:#147a45">${markedItem(it.text,"g")}</div></div>`
+          : `<div class="tn mk-head lv${lv}">${esc(it.text)}</div>`;
+      }else if(it.k==="para"){
+        html += `<div class="tn lv${lv}"><p class="mk-para">${markedItem(it.text,it.c)}</p></div>`;
+      }else if(it.k==="def"){
+        html += `<div class="tn lv${lv}"><div class="mk-def"><div class="term">${esc(it.term)}</div><div class="desc">${markedItem(it.desc,it.c)}</div></div></div>`;
+      }
+    }
+    html += `</div></div></details>`;
+  }
+  root.innerHTML = html;
+}
+
+document.querySelectorAll('.tab-btn').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    render(b.dataset.sub);
+  });
+});
+document.getElementById('openAll').addEventListener('click',()=>document.querySelectorAll('.topic').forEach(d=>d.open=true));
+document.getElementById('closeAll').addEventListener('click',()=>document.querySelectorAll('.topic').forEach(d=>d.open=false));
+
+render('gicho');
+</script>
+</body>
+</html>
